@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>每日任務</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--text:#1d2333;--sub:#667088;--line:#dfe4f0;--acc:#3b6cf6}
+@media(prefers-color-scheme:dark){:root{--bg:#12151f;--card:#1c2132;--text:#eef1fa;--sub:#9aa4bf;--line:#2b3250;--acc:#6d93ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+#app{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px}
+.bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+button{border:0;background:var(--acc);color:#fff;border-radius:10px;padding:8px 14px;font-size:15px}
+button.g{background:var(--line);color:var(--text)}
+input{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:10px;font-size:16px;width:100%}
+.add{display:flex;gap:8px;margin:10px 0}
+.pg{height:8px;background:var(--line);border-radius:6px;overflow:hidden}
+.pg i{display:block;height:100%;background:var(--acc);width:0;transition:width .3s}
+.pt{font-size:13px;color:var(--sub);margin:4px 0}
+ul{list-style:none;padding:0;margin:0}
+li{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px}
+li input[type=checkbox]{width:22px;height:22px;flex:none}
+li span{flex:1;word-break:break-all}
+li.d span{text-decoration:line-through;opacity:.5}
+li button{background:none;color:var(--sub);padding:2px 8px}
+#cloud{margin-top:24px;padding:12px;border:1px dashed var(--line);border-radius:12px;font-size:14px;color:var(--sub)}
+#cloud input{margin:4px 0}
+#cloud .row{display:flex;gap:8px;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="app">
+<h1>📝 每日任務</h1>
+<div class="bar"><button class="g" onclick="shift(-1)">←</button><b id="dt"></b><button class="g" onclick="shift(1)">→</button></div>
+<div class="pg"><i id="bar"></i></div>
+<div class="pt" id="pt"></div>
+<div class="add"><input id="in" placeholder="新增任務…" onkeydown="if(event.key==='Enter')add()"><button onclick="add()">＋</button></div>
+<ul id="ls"></ul>
+<div id="cloud"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* ===== 第 2 步（雲端同步）才需要：把 Firebase 給你的設定貼在這裡，取代 null =====
+   例如：const FIREBASE_CONFIG = { apiKey:"...", authDomain:"...", projectId:"...", appId:"..." };
+*/
+const FIREBASE_CONFIG = null;
+/* ================================================================== */
+
+var data = {}, cur = new Date(), user = null, db = null, auth = null;
+try { data = JSON.parse(localStorage.getItem("tasks_v1") || "{}"); } catch (e) { data = {}; }
+
+function key(d) { return d.toLocaleDateString("sv-SE"); }
+function list() { return data[key(cur)] || (data[key(cur)] = []); }
+
+function save() {
+  try { localStorage.setItem("tasks_v1", JSON.stringify(data)); } catch (e) {}
+  if (user && db) {
+    db.collection("users").doc(user.uid).set({ data: JSON.stringify(data) })
+      .catch(function (e) { alert("雲端儲存失敗：" + e.message); });
+  }
+}
+
+function render() {
+  var d = cur, w = "日一二三四五六"[d.getDay()];
+  document.getElementById("dt").textContent = (d.getMonth() + 1) + "/" + d.getDate() + " (" + w + ")" + (key(d) === key(new Date()) ? " 今天" : "");
+  var ls = document.getElementById("ls"); ls.innerHTML = "";
+  var items = list(), done = 0;
+  items.forEach(function (t, i) {
+    if (t.done) done++;
+    var li = document.createElement("li"); if (t.done) li.className = "d";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = t.done;
+    cb.onchange = function () { t.done = cb.checked; save(); render(); };
+    var sp = document.createElement("span"); sp.textContent = t.text;
+    var bt = document.createElement("button"); bt.textContent = "✕";
+    bt.onclick = function () { items.splice(i, 1); save(); render(); };
+    li.append(cb, sp, bt); ls.appendChild(li);
+  });
+  document.getElementById("bar").style.width = (items.length ? done / items.length * 100 : 0) + "%";
+  document.getElementById("pt").textContent = items.length ? "完成 " + done + " / " + items.length : "今天還沒有任務";
+}
+function add() {
+  var el = document.getElementById("in"), v = el.value.trim();
+  if (!v) return;
+  list().push({ text: v, done: false }); el.value = ""; save(); render();
+}
+function shift(n) { cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + n); render(); }
+
+function renderCloud() {
+  var c = document.getElementById("cloud");
+  if (!auth) { c.textContent = "目前資料只存在這支手機的瀏覽器裡。要跨裝置保存，請完成教學的第 2 步。"; return; }
+  if (user) {
+    c.innerHTML = "☁️ 已登入：<b></b>　資料會自動同步<div class='row'><button class='g' onclick='auth.signOut()'>登出</button></div>";
+    c.querySelector("b").textContent = user.email; return;
+  }
+  c.innerHTML = "☁️ 登入後，資料會存到雲端<div class='row'><button onclick='googleLogin()'>用 Google 登入</button></div><div style='margin-top:10px'>或用 Email：</div><input id='em' type='email' placeholder='Email'><input id='pw' type='password' placeholder='密碼（至少 6 碼）'><div class='row'><button onclick='doAuth(false)'>登入</button><button class='g' onclick='doAuth(true)'>註冊</button></div>";
+}
+function googleLogin() {
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function (err) { alert(err.message); });
+}
+function doAuth(isNew) {
+  var e = document.getElementById("em").value.trim(), p = document.getElementById("pw").value;
+  var r = isNew ? auth.createUserWithEmailAndPassword(e, p) : auth.signInWithEmailAndPassword(e, p);
+  r.catch(function (err) { alert(err.message); });
+}
+
+if (FIREBASE_CONFIG && typeof firebase !== "undefined") {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  auth = firebase.auth(); db = firebase.firestore();
+  auth.onAuthStateChanged(function (u) {
+    user = u;
+    if (u) {
+      db.collection("users").doc(u.uid).get().then(function (s) {
+        if (s.exists) { try { data = JSON.parse(s.data().data || "{}"); localStorage.setItem("tasks_v1", JSON.stringify(data)); } catch (e) {} }
+        else { save(); }
+        render(); renderCloud();
+      }).catch(function (e) { alert("讀取失敗：" + e.message); });
+    } else { renderCloud(); }
+  });
+}
+render(); renderCloud();
+</script>
+</body>
+</html>
