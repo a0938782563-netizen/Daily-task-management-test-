@@ -48,7 +48,15 @@ li button{background:none;color:var(--sub);padding:2px 8px}
 /* ===== 第 2 步（雲端同步）才需要：把 Firebase 給你的設定貼在這裡，取代 null =====
    例如：const FIREBASE_CONFIG = { apiKey:"...", authDomain:"...", projectId:"...", appId:"..." };
 */
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "…",
+  authDomain: "…",
+  projectId: "…",
+  storageBucket: "…",
+  messagingSenderId: "…",
+  appId: "…",
+  measurementId: "…"
+};
 /* ================================================================== */
 
 var data = {}, cur = new Date(), user = null, db = null, auth = null;
